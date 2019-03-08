@@ -12,13 +12,13 @@ using namespace cv;
 using namespace std;
 
 #define NUMBUF 30
+string FILENAME;
 
 string getDlgFileName()
 {
 	OPENFILENAME ofn;
 	char szFile[260] = "\0";       // buffer for file name
 	HWND hwnd = NULL;              // owner window
-	HANDLE hf;
 
 	GetWindow(hwnd, GW_OWNER);
 	ZeroMemory(&ofn, sizeof(ofn));
@@ -40,20 +40,28 @@ string getDlgFileName()
 		return string();
 
 	string str(szFile);
-	int index = str.size();
-	int backslashindex = index;
-	int dotindex = index;
+	int len = str.size();
+	int index = len;
+	int backslashindex = len;
+	int dotindex = len;
 	while (index > 0) {
 		if (str[index - 1] == '\\') {
 			backslashindex = index;
 			break;
-		} else if( str[index -1 ])
+		}
+		else if (str[index - 1] == '.' && dotindex == len ) {
+			dotindex = index;
+		}
+		index--;
 	}
-	string filename = str.substr(str.begin(), str.end() );
+	
+	FILENAME = str.substr(backslashindex, dotindex - backslashindex - 1 );
 
+	cout << FILENAME << endl;
 	return ofn.lpstrFile;
 }
 
+int imagenumber = 0;
 VideoCapture openFile()
 {
 	string file = getDlgFileName();
@@ -63,6 +71,7 @@ VideoCapture openFile()
 	VideoCapture cap(file); // open the default camera
 	if (!cap.isOpened())  // check if we succeeded
 		return -1;
+	imagenumber = 0;
 	return cap;
 }
 
@@ -82,7 +91,8 @@ void setPrevFrameBuffer(vector<Mat> &prev, Mat frame) {
 }
 
 int storeFrame(Mat frame) {
-	return 0;// imwrite()
+	string filename = FILENAME + "-" + to_string(imagenumber++) + ".jpg";
+	return imwrite(filename.c_str() , frame);
 }
 
 int main(int, char**)
@@ -98,8 +108,6 @@ int main(int, char**)
 	bool playing = false;
 	int input = waitKeyEx(0);
 
-	cout << input << endl;
-
 	vector<Mat> prev = vector<Mat>(NUMBUF);
 	int frameindex = 1;
 	double framecount = cap.get(CAP_PROP_FRAME_COUNT);
@@ -109,11 +117,14 @@ int main(int, char**)
 	//previous frame p
 	//capture c
 	//open new file o
-	while (input != 'q' && input != 'Q' && ( !playing && input >= 0) || playing ) {
-		if (input == 32)
+	while (input != 'q' && input != 'Q' && (( !playing && input >= 0) || playing )) {
+		if (input == 32) {
 			playing = !playing;
+			cout << (playing ? "play" : "pause") << endl;
+		}
 
 		if (input == 'o') {
+			cout << "open new file" << endl;
 			cap.release();
 			cap = openFile();
 			cap >> frame;
@@ -127,21 +138,31 @@ int main(int, char**)
 		}
 
 		if (input == 'c') {
-
+			cout << "capture frame: " + FILENAME + "-" + to_string(imagenumber) + ".jpg" << endl;
+			storeFrame(frame);
+			input = waitKey(0);
+			continue;
 		}
+
 		if (playing) {
-			setPrevFrameBuffer(prev, frame);
-			cap >> frame;
-			while (frame.empty()) {
-				if (frameindex < framecount) {
-					cap >> frame;
-					frameindex++;
-					continue;
+			if (previndex < prevnum) {
+				frame = prev[(previndex++ + prevstartindex) % 30].clone();
+				frameindex++;
+			} {
+				setPrevFrameBuffer(prev, frame);
+				cap >> frame;
+				frameindex++;
+				while (frame.empty()) {
+					if (frameindex < framecount) {
+						frameindex++;
+						cap >> frame;
+						continue;
+					}
+					MessageBox(NULL, "End of file", "EOL", MB_OK);
+					playing = false;
+					input = waitKey(0);
+					break;
 				}
-				MessageBox(NULL, "End of file", "EOL", MB_OK);
-				playing = false;
-				input = waitKey(0);
-				break;
 			}
 			imshow("frame", frame);
 			input = waitKeyEx(30);
@@ -189,9 +210,9 @@ int main(int, char**)
 				}
 				imshow("frame", frame);
 			}
+			cout << frameindex << endl;
 			input = waitKeyEx(0);
 		}
-		cout << frameindex<<", "<<input << endl;
 	}
 	return 0;
 }
